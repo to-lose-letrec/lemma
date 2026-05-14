@@ -1,0 +1,40 @@
+name: Verify Lemma wire grammar
+
+# Runs the grammar/verify.py corpus on every push to main and every PR
+# that touches the wire-surface artifacts. The job is tiny — a single
+# pip install and one Python invocation — and uses seconds of free-tier
+# Actions minutes. See grammar/README.md for what the verifier checks.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'grammar/**'
+      - 'SPEC.md'
+      - '.github/workflows/verify-grammar.yml'
+  pull_request:
+    paths:
+      - 'grammar/**'
+      - 'SPEC.md'
+      - '.github/workflows/verify-grammar.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Lark accept/reject corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install lark
+        run: python3 -m pip install --disable-pip-version-check 'lark>=1.0,<2'
+
+      - name: Run grammar verification
+        run: python3 grammar/verify.py
