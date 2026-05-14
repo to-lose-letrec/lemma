@@ -52,6 +52,21 @@ importer.
 Spec-tracking artifact, versioned alongside [SPEC.md](../SPEC.md). No
 reference parser implementation yet.
 
+## Verification
+
+`verify.py` is the standing regression check while the project has no CI.
+It parses a corpus of accept/reject cases derived from SPEC §3, §5, §5.1,
+§5.3, §6, §7, §8.1, §9, and §11 under both Earley and LALR builds. Run it
+after any change to `lemma.lark` or any normative SPEC section that
+touches the wire surface:
+
+```sh
+python3 grammar/verify.py
+```
+
+Exit code 0 means full pass; 1 means at least one accept-or-reject case
+diverged from expectation. Requires `lark` (any 1.x).
+
 ## License
 
 Licensed under the Apache License, Version 2.0. See ../LICENSE.
