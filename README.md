@@ -1,5 +1,7 @@
 # Lemma
 
+[![Verify grammar](https://github.com/to-lose-letrec/lemma/actions/workflows/verify-grammar.yml/badge.svg?branch=main)](https://github.com/to-lose-letrec/lemma/actions/workflows/verify-grammar.yml)
+
 **An EDN-native protocol for LLM-to-knowledge interaction.**
 
 Lemma is a wire protocol for multi-agent systems that share a structured, cohesion-checked, bitemporal fact-store. It is designed for the case where the "client" is a generative language model rather than a programmed system — and where the resulting interaction needs to be efficient, human-debuggable, and structurally resistant to misuse.
