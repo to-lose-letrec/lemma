@@ -1,0 +1,239 @@
+// Lemma wire grammar — Apache-2.0
+//
+// Client -> server wire surface for Lemma, derived from SPEC.md.
+// Target dialect: the common Lark subset accepted by both
+// guidance-ai/llguidance and outlines. No %declare, no templates,
+// no ?-elision rules, no ambiguity directives, no parser-specific
+// features. Terminals are explicit regex; whitespace and comments
+// are dropped via %ignore.
+//
+// -------------------------------------------------------------------
+// Structural invariants enforced by this grammar (SPEC.md §3):
+//
+//   * The single top-level production is `verb_form`: a list
+//     `( LEMMA_VERB <arg>... )`. The top-level value of a client
+//     message MUST be that list and nothing else.
+//
+//   * Lists DO NOT appear in argument position. The `arg` rule
+//     admits only atoms, vectors, maps, sets, and tagged literals.
+//     A parenthesized form nested inside a vector / map / set / tag
+//     payload is a parse error by construction (SPEC §3 hard rule:
+//     "Lists appear only as the top-level verb form").
+//
+//   * `LEMMA_VERB` is a placeholder terminal that accepts any bare
+//     or namespaced symbol that is NOT prefixed with `?`. At session
+//     time, a constrained-decoder host narrows this terminal to the
+//     concrete verb set advertised in `:welcome` (`:verbs :core` +
+//     `:verbs :extensions`, per SPEC §10). The static grammar does
+//     not — and cannot — encode that set; specialization is the
+//     embedder's responsibility.
+//
+// -------------------------------------------------------------------
+// Tagged literals covered (SPEC §5):
+//
+//   #fact{...}        SPEC §5.1   shape-constrained payload
+//   #violation{...}   SPEC §5.2   shape-constrained payload (server-emitted;
+//                                 included for round-trip completeness)
+//   #entity "..."     SPEC §5.3   non-empty string payload
+//   #proposal "..."   SPEC §5     string payload
+//   #tx "..."         SPEC §5     string payload
+//   #ref "..."        SPEC §5     string payload
+//   #cursor "..."     SPEC §5     string payload
+//   #watch "..."      SPEC §5     string payload
+//   #session "..."    SPEC §5     string payload
+//   #world "..."      SPEC §5     string payload
+//
+// Empty-name rejection for `#entity ""` (SPEC §5.3) is enforced at
+// the terminal level: ENTITY_STRING requires at least one char inside
+// the quotes. All other tag payload validation (required keys, key
+// uniqueness, predicate resolution, arity, type-matching) is the
+// server's job, not the grammar's.
+//
+// -------------------------------------------------------------------
+// Metadata (`^{...}`) is admitted as an optional prefix on any value.
+// SPEC §3 / §5.1 permit it on verb forms and `#fact` payloads; this
+// grammar admits it permissively, letting the server enforce where it
+// is meaningful and ignore it elsewhere. Metadata maps cannot contain
+// lists (same `arg`-position rule).
+//
+// Comments: EDN `;` line comments are ignored. `#_` form-discard is
+// NOT modeled here — it would require eliding the next form, which the
+// common Lark subset cannot express cleanly. Clients SHOULD strip
+// discards before serialization; servers that accept them do so via a
+// pre-parse pass, not via this grammar.
+// =====================================================================
+
+start: verb_form
+
+// ---- Top-level: the only place a list may appear (SPEC §3) ----
+
+verb_form: metadata? "(" LEMMA_VERB arg* ")"
+
+// ---- Argument position: everything except a list (SPEC §3) ----
+
+arg: metadata? bare_value
+bare_value: atom
+          | vector
+          | map
+          | set
+          | tagged
+
+// A value that may carry leading metadata. Used inside vectors, maps,
+// sets, and tag payloads. Identical to `arg`; aliased for readability.
+value: metadata? bare_value
+
+// ---- Collections in argument position (SPEC §3) ----
+
+vector: "[" value* "]"
+map:    "{" map_entry* "}"
+set:    "#{" value* "}"
+
+map_entry: value value
+
+// ---- Metadata (SPEC §3) ----
+//
+// Permissive at the value level: any map may follow `^`. Server
+// enforces where it is structurally meaningful (verb forms, #fact).
+
+metadata: "^" map
+
+// ---- Tagged literals (SPEC §5) ----
+
+tagged: fact_tag
+      | violation_tag
+      | entity_tag
+      | string_payload_tag
+
+// `#fact{...}` — SPEC §5.1. Three legal shapes (unary / binary / n-ary)
+// distinguished by the entries present. The grammar admits any ordering
+// and any combination of the four legal keys (:predicate, :subject,
+// :object, :args); the server enforces:
+//   - :predicate required;
+//   - exactly one of {:subject alone, :subject+:object, :args};
+//   - :predicate value is a declared, non-intensional predicate;
+//   - arity, type-matching.
+// Optional `^{...}` metadata may precede the `#fact` per SPEC §5.1.
+fact_tag: "#fact" "{" fact_entry* "}"
+
+fact_entry: KW_PREDICATE value
+          | KW_SUBJECT   value
+          | KW_OBJECT    value
+          | KW_ARGS      vector
+
+// `#violation{...}` — SPEC §5.2. Server-emitted; included so an agent
+// can round-trip a violation back into a query / argument position.
+// Same permissive-keys approach as `#fact`: server enforces required
+// keys (:rule, :anchor, :bindings, :message).
+violation_tag: "#violation" "{" violation_entry* "}"
+
+violation_entry: KW_RULE     value
+               | KW_ANCHOR   value
+               | KW_BINDINGS map
+               | KW_MESSAGE  STRING
+
+// `#entity "..."` — SPEC §5.3. Empty name is rejected at the terminal
+// level; ENTITY_STRING requires at least one character between quotes.
+entity_tag: "#entity" ENTITY_STRING
+
+// All remaining string-payload tags share one production (SPEC §5).
+// Empty strings are permitted here — `#proposal ""` etc. will be
+// rejected by the server as `:unknown-handle`, not as malformed.
+string_payload_tag: STRING_TAG STRING
+
+STRING_TAG: "#proposal"
+          | "#tx"
+          | "#ref"
+          | "#cursor"
+          | "#watch"
+          | "#session"
+          | "#world"
+
+// ---- Atoms ----
+
+atom: NIL
+    | BOOL
+    | FLOAT
+    | INTEGER
+    | CHAR
+    | STRING
+    | VARIABLE
+    | KEYWORD
+    | SYMBOL
+
+// =====================================================================
+// Terminals
+//
+// Symbol/keyword character classes follow EDN reader conventions
+// (clojure.edn) closely enough for the wire surface. Bare symbols
+// in argument position are reserved for predicate names and operator
+// heads (SPEC §8.1). `?`-prefixed symbols are query variables — a
+// distinguished symbol class.
+// =====================================================================
+
+NIL:   "nil"
+BOOL:  "true" | "false"
+
+// Integers: optional sign, digits, optional bigint suffix `N`.
+INTEGER: /[+-]?(0|[1-9][0-9]*)N?/
+
+// Floats: optional sign, digits, then either a fractional part with
+// optional exponent, or just an exponent. Optional bigdecimal suffix `M`.
+FLOAT: /[+-]?(0|[1-9][0-9]*)(\.[0-9]+([eE][+-]?[0-9]+)?|[eE][+-]?[0-9]+)M?/
+     | /[+-]?(0|[1-9][0-9]*)\.[0-9]+M/
+     | /[+-]?(0|[1-9][0-9]*)M/
+
+// Strings: double-quoted, with EDN escapes \" \\ \n \t \r \b \f
+// and \uXXXX unicode escapes. Any other char allowed verbatim.
+STRING: /"([^"\\]|\\["\\ntrbf]|\\u[0-9a-fA-F]{4})*"/
+
+// `#entity` payload: same shape as STRING but with at least one
+// content unit between the quotes (SPEC §5.3 empty-name rejection).
+ENTITY_STRING: /"([^"\\]|\\["\\ntrbf]|\\u[0-9a-fA-F]{4})+"/
+
+// Characters: \newline \space \tab \return \\ \" \uXXXX or any single char.
+CHAR: /\\(newline|space|tab|return|formfeed|backspace)/
+    | /\\u[0-9a-fA-F]{4}/
+    | /\\./
+
+// Variables: `?`-prefixed symbols. SPEC §8.1 distinguishes these from
+// bare symbols. Namespace not permitted on variables.
+VARIABLE: /\?[A-Za-z_*!?+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*/
+
+// Keywords: leading `:`, optional namespace. Used both for entries in
+// `#fact` / `#violation` (matched by the more-specific KW_* terminals
+// below, which Lark resolves first when longer) and for free-form
+// keyword constants in argument position.
+KEYWORD: /:[A-Za-z_*!?+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*(\/[A-Za-z_*!?+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*)?/
+
+// Reserved tag-payload keywords. Listed explicitly so the parser
+// dispatches `fact_entry` / `violation_entry` deterministically.
+// Each is a strict subset of KEYWORD and takes priority by length.
+KW_PREDICATE: ":predicate"
+KW_SUBJECT:   ":subject"
+KW_OBJECT:    ":object"
+KW_ARGS:      ":args"
+KW_RULE:      ":rule"
+KW_ANCHOR:    ":anchor"
+KW_BINDINGS:  ":bindings"
+KW_MESSAGE:   ":message"
+
+// Symbols: bare or namespaced (`ns/name`). EDN-permitted chars; first
+// char cannot be `?` (those are variables), cannot be a digit, cannot
+// be `:` (keyword) or `#` (tag). Match common predicate names like
+// `member-of`, `core/equivalent`, `my-pack/foo`.
+SYMBOL: /[A-Za-z_*!+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*(\/[A-Za-z_*!?+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*)?/
+
+// LEMMA_VERB: the placeholder for the top-level verb head. Same shape
+// as SYMBOL — session specialization narrows it to the welcome's
+// `:verbs` set (SPEC §10). Defined separately so a constrained-decoder
+// host can rewrite this single terminal at session time without
+// touching the rest of the grammar.
+LEMMA_VERB: /[A-Za-z_*!+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*(\/[A-Za-z_*!?+\-=<>$&][A-Za-z0-9_*!?+\-=<>$&.]*)?/
+
+// ---- Whitespace and comments ----
+
+WS:           /[ \t\r\n,]+/                 // EDN treats `,` as whitespace.
+LINE_COMMENT: /;[^\n]*/                     // EDN `;` comments.
+
+%ignore WS
+%ignore LINE_COMMENT
