@@ -157,7 +157,7 @@ Exactly one write path during normal operation:
 (assert #proposal "p-42")        ; single-shape; promotes a handle
 ```
 
-- `propose` returns `{:event :proposed :proposal #proposal "…" :cohesive? :acceptable? :expires-at}` **if and only if** cohesive+acceptable. Otherwise `{:event :rejected :reason … :violations […]}` with no handle.
+- `propose` returns `{:event :proposed :proposal #proposal "…" :expires-at #inst "…"}` **if and only if** the proposal passes all five write-time checks (see below). Otherwise `{:event :rejected :reason … :violations […]}` for domain failures (stages 3-5) or `{:event :error :reason :bad-args :detail {…}}` for protocol failures (stages 1-2), with no handle minted.
 - `assert` takes exactly one argument: a `#proposal` handle. No inline-fact shape, no refs.
 - **Cohesion is re-checked at assert time.** A proposal handle is a statement about the world at propose-time; intervening commits can invalidate it. Re-check at assert; on failure, return fresh violations.
 - Import is the only path for "unconditional as long as valid" — restoration, migration, bootstrap. Not for routine writes.
