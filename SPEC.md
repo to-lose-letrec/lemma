@@ -32,13 +32,14 @@
 - **Body shape**: one top-level EDN value per message. Client sends s-expression verbs; server sends maps keyed by `:event`.
 - **Lists appear only as the top-level verb form.** A client message is one EDN value; if that value is a list, it is the verb invocation, and its first element MUST resolve to a verb name advertised on the current session (core or pack extensions). Lists nested anywhere else — inside an argument, a map value, a vector — are a structural error and the message is rejected with `:error :reason :malformed` without further parsing of the form. Collections in argument position are built from vectors, maps, keywords, and tagged literals; the parenthesized list syntax is reserved for verb invocation alone. This is structural defense in depth: §2 already forbids any host-language execution path on the wire, but the rule keeps a "looks like a function call" payload from ever reaching a position the server might be tempted to interpret, and it forecloses nested-verb evaluation ambiguity by construction. Pairs with §11's import-transports-facts-only guarantee — between them, no code-shaped value on the wire can survive past dispatch validation.
 - **Metadata** (`^{…}`) is reserved for operation-semantic annotations (confidence, source tagging), capture-time stamping, and client-supplied request correlation. Session routing never rides in metadata.
-- **Request correlation.** A client MAY attach `^{:request-id "…"}` to any verb form. If present, the server echoes the value as `:in-reply-to` on the response event for that request. Required for HTTP+SSE when running concurrent requests (POSTs and SSE events are not order-correlated); optional over a Unix socket, where FIFO request/response ordering already suffices. For verbs that establish a stream (e.g. `watch`), `:in-reply-to` appears on the establishment event; subsequent stream events carry their own handle (`#watch`, `#cursor`) and do not echo it.
+- **Request correlation.** A client MAY attach `^{:request-id "…"}` to any verb form. If present, the server echoes the value as `:in-reply-to` on the response event for that request. Required for HTTP+SSE when running concurrent requests (POSTs and SSE events are not order-correlated); optional over a Unix socket, where FIFO request/response ordering already suffices. For verbs that establish a stream (e.g. `watch`, `watch-pattern`), `:in-reply-to` appears on the establishment event — concretely, `{:event :watch-established :watch #watch "…"}` (shape in §10) — and subsequent stream events carry their own handle (`#watch`, `#cursor`) and do not echo it.
 
 ## 4. Session model
 
 - `hello` upgrades an anonymous connection to a named session; server returns `{:event :welcome …}` with `#session`, default world, capabilities, predicates, verbs (core + pack extensions).
 - **`hello` is the only verb permitted on an anonymous connection.** Any other verb sent before `hello` returns `{:event :error :reason :no-session}`. The client always initiates; the server does not push pre-session events. (v1 — auth/handshake extensions deferred per §14.)
 - **Per-session state** (torn down on disconnect): open proposals, watch subscriptions, query cursors, current `use-world` selection.
+- **Server-initiated session teardown.** Servers MAY teardown long-idle sessions (operator-configured idle TTL). When they do, the server emits `{:event :session-expired :session #session "…"}` to the session's registered sink before closing the transport, so the client can distinguish a deliberate TTL-driven close from a network failure or server crash. This is the polite-close signal; the in-protocol event SHAPE is enumerated in §10. The TTL value is not advertised in `:welcome` in v1; clients that need an explicit keep-alive contract issue periodic no-op reads.
 - **Shared state**: committed facts, tx log, indexes, rules, packs. Each committed tx records its originating `#session`.
 - Proposals are bound to the creating session; cross-session assert of a `#proposal` is rejected.
 - **A session sees exactly one world's facts at a time.** The current `use-world` selection is exclusive — there is no implicit cross-world visibility. Queries return only the current world's EDB (plus its IDB derived from its loaded packs); rules from the current world's packs apply only to the current world's facts; proposals and asserts commit to the current world only. Multiple worlds may coexist on a server (and the `worlds` verb lists them), but composition across worlds — read-only references, snapshot imports, hypothesis-world overlays on a base world — is **not** in v1. Workflows that need cross-world reasoning today must do it client-side: query world A, switch with `use-world`, propose into world B with the queried results re-asserted as fresh facts (losing A's tx-ids and refs in the process). A protocol mechanism for cross-world reads is a recognized gap and will be revisited; v1 is single-world-per-session by design.
@@ -146,6 +147,8 @@ Both default to fabricated values if omitted. Substitution rules and other non-v
 
 Introspection verbs that return world-scoped data (`predicates`, `verbs`, `rules`, `stats`) accept an optional `:world #world "…"` qualifier; default is the session's current world. This lets an agent survey a world without `use-world`-ing into it.
 
+**`use-world` ACKs explicitly.** On success, `(use-world #world "…")` returns `{:event :world-selected :world #world "…"}` (shape in §10) so a client confirms the switch without a follow-up read. Failure to resolve the world returns `:error :reason :bad-args :detail {:reason :unknown-world}`.
+
 **Welcome carries names; introspection verbs carry detail.** `:welcome` advertises only the *names* of available predicates and verbs (split into `:core` and `:extensions {pack-name …}`). To learn signatures, types, cardinality, or doc, call `predicates` / `verbs` / `rules` / `capabilities` directly. This keeps `hello` cheap on connection and lets agents fetch detail only for the surface they actually intend to use.
 
 ## 7. Write semantics
@@ -252,35 +255,35 @@ Without `:as-of` / `:between`, the query reads the world at the current head tx.
 
 ```clojure
 ;; Members of the managers set.
-(query :find [?x]
-       :where [[member-of ?x #entity "managers"]])
+(query {:find  [?x]
+        :where [[member-of ?x #entity "managers"]]})
 
 ;; All inconsistencies (intensional predicate; rule-derived).
-(query :find [?x]
-       :where [[inconsistent ?x]])
+(query {:find  [?x]
+        :where [[inconsistent ?x]]})
 
 ;; Members of managers who are NOT also in interns.
-(query :find [?x]
-       :where [[member-of ?x #entity "managers"]
-               [:not [member-of ?x #entity "interns"]]])
+(query {:find  [?x]
+        :where [[member-of ?x #entity "managers"]
+                [:not [member-of ?x #entity "interns"]]]})
 
 ;; Count members per set.
-(query :find [?s [:count ?x]]
-       :where [[member-of ?x ?s]])
+(query {:find  [?s [:count ?x]]
+        :where [[member-of ?x ?s]]})
 
 ;; Anything that implies an equivalent of "deprecated".
-(query :find [?x]
-       :where [[implies ?x ?y]
-               [equivalent ?y #entity "deprecated"]])
+(query {:find  [?x]
+        :where [[implies ?x ?y]
+                [equivalent ?y #entity "deprecated"]]})
 
 ;; Generic predicate-variable: any binary fact about #entity "alice".
-(query :find [?p ?y]
-       :where [[?p #entity "alice" ?y]])
+(query {:find  [?p ?y]
+        :where [[?p #entity "alice" ?y]]})
 
 ;; Bitemporal: members as of an old tx.
-(query :find [?x]
-       :where [[member-of ?x #entity "managers"]]
-       :as-of #tx "t-1024")
+(query {:find  [?x]
+        :where [[member-of ?x #entity "managers"]]
+        :as-of #tx "t-1024"})
 ```
 
 **Reuse by other verbs.**
@@ -321,6 +324,9 @@ Maps keyed by `:event`:
 {:event :rejected   :reason … :violations [#violation{…}]}
 {:event :error      :reason … :message "…" :detail {…}}
 
+{:event :world-selected   :world #world "…"}
+{:event :session-expired  :session #session "…"}
+
 {:event :predicates :world #world "…"
                     :predicates {:core       {pred-name {:arity N :value-types […] :cardinality :one|:many
                                                          :unique? bool :required? bool :intensional? bool :doc "…"}}
@@ -333,6 +339,7 @@ Maps keyed by `:event`:
 {:event :result         :cursor #cursor "…" :rows [[…]] :done? false
                         :affordances [{:verb (…) :hint "…"}]}
 {:event :inconsistencies :as-of #tx "…" :violations [#violation{…}]}
+{:event :watch-established :watch #watch "…"}
 {:event :watch-event    :watch #watch "…" :type :added|:retracted :data …}
 {:event :watch-gap      :watch #watch "…" :missed-since #tx "…" :missed-until #tx "…"
                         :event-count N}
@@ -360,7 +367,7 @@ Maps keyed by `:event`:
 
 - **`:capabilities` and `:limits`.** The capability set is open and namespaced: bare-keyword flags (`:lemma/<flag>`) are reserved for the protocol; pack-namespaced flags (`:pack-name/<flag>`) advertise pack-defined features. v1 reserves these protocol flags: `:lemma/v1` (always present; signals protocol version 1), `:lemma/tls` (TLS active on this connection), `:lemma/peer-cred` (Unix-socket peer-credential auth populated `#session`), `:lemma/cursor-pagination`, `:lemma/watch`, `:lemma/import`, `:lemma/export`. Pack flags are advertised whenever the pack contributes one. The `:limits` map carries server-policy resource caps: `:max-message-bytes` (single EDN message), `:max-fact-bytes` (single `#fact`), `:max-facts-per-propose` (batch size), `:max-where-depth` (`:where` clause nesting), `:max-watch-buffer` (per-watch event buffer; default 1000 per §9). Servers MUST advertise each limit they enforce; clients respect them or face `:limit-exceeded` rejection. Limit categories may grow in v1.x without breaking clients (additive).
 - **`:tx-info`, `:worlds`, `:provenance` shapes.**
-  - `:tx-info` is returned by `(tx-info #tx "…")`. `:ops` carries the canonical per-operation record (matching the `log.edn` `:ops` array in `SERVER.md` §1.1) so a client can reconstruct exactly what the tx applied — both explicit operations and any implicit cardinality-driven retracts. `:proposal` is present iff the tx was committed from a `propose` / `assert` flow (absent for direct `import` writes and for retracts whose `retract` invocation didn't go through propose).
+  - `:tx-info` is returned by `(tx-info #tx "…")`. `:ops` carries the canonical per-operation record — assert and retract ops in the order the tx applied. The shape is the `log.edn` `:ops` array in `SERVER.md` §1.1 enriched with the post-replay `:ref` of each fact: assert ops on the wire carry `:ref #ref "…"`, retract ops likewise; the on-disk log stores the same op sequence without `:ref` on assert ops, because refs are allocated during `apply-tx!` after the log record is written. The wire `:ops` therefore lets a client reconstruct exactly what the tx applied (including any implicit cardinality-driven retracts) and correlate each op with the fact-handle it produced. `:proposal` is present iff the tx was committed from a `propose` / `assert` flow (absent for direct `import` writes and for retracts whose `retract` invocation didn't go through propose).
   - `:worlds` is returned by `(worlds)` and lists every world the server hosts; clients with no `:capabilities` constraints see all worlds. Each entry carries the world's declared packs (per the world's `meta.edn`) and the current head tx-id so an agent can spot busy worlds at a glance. Pack bodies are not included.
   - `:provenance` is returned by `(provenance #ref "…")` or `(provenance #tx "…")`. `:ref` is present in the response iff the request was for a fact (`#ref`); absent for tx-level provenance. `:metadata` carries the proposal-time `^{…}` annotations from §3 and §5.1 (e.g. `:confidence`, `:source-tag`).
 
@@ -389,6 +396,7 @@ Maps keyed by `:event`:
   - `:unknown-handle` — a `#proposal`, `#ref`, `#tx`, `#cursor`, or `#watch` that the server doesn't recognize from the session's current world. Handles are world-scoped; a handle minted in world A is simply absent from world B, indistinguishable from one that never existed. The server does not maintain a cross-world handle registry and does not disclose which other world (if any) a handle might belong to.
   - `:missing-pack` — operation references a pack not installed on the server (e.g. `import` of a `:log` that names a pack the server doesn't have, or opening a world whose declared packs are absent). Never auto-fetched; installation is out-of-band (see `SERVER.md`).
   - `:limit-exceeded` — request would exceed a server-advertised limit (per the `:limits` map in `:welcome`). `:detail` carries the offending limit's keyword and the observed value, e.g. `{:limit :max-facts-per-propose :observed 1500 :max 1000}`.
+  - `:shutting-down` — server has begun a graceful drain (refuse-new → drain in-flight → stop transports → close world) and will not service the request. Returned to in-flight verbs that arrive during the drain window so the client can distinguish a deliberate teardown from a crash. Remote (HTTP) transports MAY surface this reason inside a 503 response body; local (Unix-socket) transports return it inline before closing the connection.
   - `:internal` — server-side failure unrelated to the request shape; `:detail` may include a correlation id for log lookup.
 
   Pack verbs raise `:error :reason :pack/<symbol>` for pack-defined protocol failures; domain failures from pack verbs still use `:rejected`.

@@ -8,7 +8,7 @@ Lemma is a wire protocol for multi-agent systems that share a structured, cohesi
 
 ## Status
 
-**Pre-implementation. Specification stable.** The protocol is fully spec'd; the reference server has not yet been built. Every load-bearing design decision has been made and recorded; the remaining work is implementation, not specification. See [GAPS.md](./GAPS.md) for the paper trail of resolved questions.
+**0.9.0 release candidate.** The protocol specification is stable and a conformant reference server exists. The v1 verb surface (23 verbs), the ten tagged-literal types, and both v1 transports (UDS, HTTP+SSE) are implemented and exercised by an end-to-end conformance suite. Remaining pre-1.0 work is operational hardening and the post-RC review window. See [GAPS.md](./GAPS.md) for the paper trail of resolved design questions and [CHANGELOG.md](./CHANGELOG.md) for what landed in 0.9.0.
 
 ## Why a new protocol?
 
@@ -110,7 +110,7 @@ Two transports: Unix domain socket (local; identity-via-`SO_PEERCRED` optional) 
 
 ## Reference implementation
 
-Not yet written. The intended substrate is Clojure on top of Datalevin (LMDB-backed Datalog). The wire protocol is engine-agnostic; alternative implementations are expected to be possible.
+[**Dianoia**](https://github.com/to-lose-letrec/dianoia) — Clojure on top of Datalevin (LMDB-backed Datalog), with UDS and HTTP+SSE transports. The wire protocol is engine-agnostic; alternative implementations are expected to be possible.
 
 ## License
 
@@ -118,4 +118,4 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 ## Contributing
 
-The specification is currently stable but pre-implementation. Design discussion is welcome via issues; substantive feedback on the resolved-design-questions log in [GAPS.md](./GAPS.md) is particularly useful. The reference implementation has not yet started.
+The specification is in its 0.9.0 release-candidate window. Design discussion is welcome via issues; substantive feedback on the resolved-design-questions log in [GAPS.md](./GAPS.md), or the conformance experience reported by [Dianoia](https://github.com/to-lose-letrec/dianoia), is particularly useful during the RC window.
