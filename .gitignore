@@ -1,3 +1,7 @@
 # Working notes and pre-publication drafts
 AMENDMENTS.md
+LEMMA-REVISIONS.md
 whitepaper/
+
+# Tooling byproducts
+__pycache__/
