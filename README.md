@@ -8,7 +8,7 @@ Lemma is a wire protocol for multi-agent systems that share a structured, cohesi
 
 ## Status
 
-**0.9.0 release candidate.** The protocol specification is stable and a conformant reference server exists. The v1 verb surface (23 verbs), the ten tagged-literal types, and both v1 transports (UDS, HTTP+SSE) are implemented and exercised by an end-to-end conformance suite. Remaining pre-1.0 work is operational hardening and the post-RC review window. See [GAPS.md](./GAPS.md) for the paper trail of resolved design questions and [CHANGELOG.md](./CHANGELOG.md) for what landed in 0.9.0.
+**0.10.1.** The protocol specification is stable. The v1 verb surface (23 verbs), the ten handle types plus the `#inst` value literal, and both v1 transports (UDS, HTTP+SSE) are specified end-to-end; the reference server ([Dianoia](https://github.com/to-lose-letrec/dianoia), tracking 0.9.0) is converging on the 0.10.x surface. Remaining pre-1.0 work is operational hardening and the review window. See [GAPS.md](./GAPS.md) for the paper trail of resolved design questions and [CHANGELOG.md](./CHANGELOG.md) for what landed in each revision.
 
 ## Why a new protocol?
 
@@ -50,14 +50,14 @@ client → (assert #proposal "p-1")
 server → {:event :asserted :refs [#ref "r-1"] :tx #tx "t-1024"}
 
 ;; The client queries the world.
-client → (query :find [?x]
-                :where [[member-of ?x #entity "managers"]])
+client → (query {:find  [?x]
+                 :where [[member-of ?x #entity "managers"]]})
 server → {:event :result :rows [[#entity "alice"]] :done? true}
 
 ;; Time-travel queries are first-class.
-client → (query :find [?x]
-                :where [[member-of ?x #entity "managers"]]
-                :as-of #tx "t-512")
+client → (query {:find  [?x]
+                 :where [[member-of ?x #entity "managers"]]
+                 :as-of #tx "t-512"})
 server → {:event :result :rows [] :done? true}
 ```
 
@@ -93,7 +93,7 @@ Domain-specific reasoning lives in additional packs the operator installs.
 
 23 verbs across six categories: `hello` and `use-world` for sessions; `propose`, `assert`, `retract`, `cancel` for writes; `query`, `continue`, `inconsistencies` for reads; `watch`, `watch-pattern`, `unwatch` for subscriptions; `export`, `import` for bulk operations; nine introspection verbs (`capabilities`, `predicates`, `verbs`, `rules`, `stats`, `worlds`, `provenance`, `tx-info`, `dump`).
 
-Ten tagged-literal types: `#fact`, `#proposal`, `#tx`, `#ref`, `#cursor`, `#watch`, `#session`, `#world`, `#entity`, `#violation`. Each has a defined shape and lifecycle.
+Ten handle types — `#fact`, `#proposal`, `#tx`, `#ref`, `#cursor`, `#watch`, `#session`, `#world`, `#entity`, `#violation` — each with a defined shape and lifecycle, plus the `#inst` value literal (RFC-3339 instant; the wire form of the `:inst` value type).
 
 Two transports: Unix domain socket (local; identity-via-`SO_PEERCRED` optional) and HTTP+SSE (remote; TLS strongly preferred for any non-localhost deployment).
 
@@ -117,4 +117,4 @@ Apache License 2.0. See [LICENSE](./LICENSE).
 
 ## Contributing
 
-The specification is in its 0.9.0 release-candidate window. Design discussion is welcome via issues; substantive feedback on the resolved-design-questions log in [GAPS.md](./GAPS.md), or the conformance experience reported by [Dianoia](https://github.com/to-lose-letrec/dianoia), is particularly useful during the RC window.
+The specification is in its pre-1.0 review window (0.10.x). Design discussion is welcome via issues; substantive feedback on the resolved-design-questions log in [GAPS.md](./GAPS.md), or the conformance experience reported by [Dianoia](https://github.com/to-lose-letrec/dianoia), is particularly useful during the review window.

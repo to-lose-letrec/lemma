@@ -9,6 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Pre-1.0, the minor version tracks the SPEC; patch versions cover editorial and
 amendment work that does not change the wire surface.
 
+## [0.10.1] - 2026-06-09
+
+Errata to the 0.10.0 batch, from a post-application coherence audit.
+Clarifications of intent only — no new capability, no new vocabulary.
+
+### Fixed
+
+- §5.4's pack-load rejection routed through the **existing** `:missing-pack`
+  error (`:detail {:reason :unsupported-value-type :pack "…" :tag …}`),
+  surfaced at world-open time — the 0.10.0 text named a `:bad-pack` reason
+  that §10 never reserved and gave no wire surfacing point. §10's
+  `:missing-pack` bullet now covers validation failure alongside absence.
+- §8.1's constants list admits **keywords** (and names `#inst` explicitly) —
+  required for facts with `:keyword`-typed values (§5.4) to be queryable by
+  value. The Lark grammar already admitted keyword atoms; the prose lagged.
+- §9 watch-gap reconciliation: the tx-info-range replay is exact for `:all`
+  watches and a **superset** for pattern watches (per-tx ops are not
+  pattern-filtered; the client re-applies its pattern). The "exactly the
+  delta stream" overclaim corrected.
+
+### Changed (editorial)
+
+- README brought to 0.10.x: status paragraph, tag-count language (ten handle
+  types + the `#inst` value literal), contributing section, and the wire
+  excerpt's two `query` examples rewritten to the canonical single-map form
+  (the bare-kwargs form EA-1 retired; a conformant server rejects it).
+- SPEC title drops "(draft)".
+- §5.3's tag-mechanics analogy drops the rejected `#uuid`.
+- §8.1's cursor-expiry recovery wording generalized to cover tx-info-range
+  cursors.
+
+[0.10.1]: https://github.com/to-lose-letrec/lemma/releases/tag/v0.10.1
+
 ## [0.10.0] - 2026-06-09
 
 External-protocol-review revision batch (`LEMMA-REVISIONS.md`, R1–R11). This is
