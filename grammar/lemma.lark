@@ -42,6 +42,10 @@
 //   #watch "..."      SPEC §5     string payload
 //   #session "..."    SPEC §5     string payload
 //   #world "..."      SPEC §5     string payload
+//   #inst "..."       SPEC §5/§3  value literal (RFC-3339 instant), not a handle
+//
+// `#uuid` is deliberately NOT accepted (SPEC §3 closure / R4): the
+// server installs an explicit rejecting reader for it.
 //
 // Empty-name rejection for `#entity ""` (SPEC §5.3) is enforced at
 // the terminal level: ENTITY_STRING requires at least one char inside
@@ -103,6 +107,7 @@ tagged: fact_tag
       | violation_tag
       | entity_tag
       | string_payload_tag
+      | inst_tag
 
 // `#fact{...}` — SPEC §5.1. Three legal shapes (unary / binary / n-ary)
 // distinguished by the entries present. The grammar admits any ordering
@@ -139,6 +144,12 @@ entity_tag: "#entity" ENTITY_STRING
 // Empty strings are permitted here — `#proposal ""` etc. will be
 // rejected by the server as `:unknown-handle`, not as malformed.
 string_payload_tag: STRING_TAG STRING
+
+// `#inst "..."` — SPEC §5 / §3. A value literal (RFC-3339 instant),
+// not a lifecycle handle; given its own production to keep it out of
+// the handle-tag group. Payload validity (RFC-3339 shape) is the
+// server's responsibility, not the grammar's.
+inst_tag: "#inst" STRING
 
 STRING_TAG: "#proposal"
           | "#tx"

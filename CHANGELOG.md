@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Pre-1.0, the minor version tracks the SPEC; patch versions cover editorial and
 amendment work that does not change the wire surface.
 
+## [0.10.0] - 2026-06-09
+
+External-protocol-review revision batch (`LEMMA-REVISIONS.md`, R1–R11). This is
+a **wire-surface change** — it supersedes 0.9.0's "no further wire-surface
+changes anticipated" note. Two reserved-but-unemitted vocabulary items are
+removed and two fields are added; all changes are additive or remove dead
+vocabulary. R7 (`:foreign-proposal` / `:stale-proposal` adjudication) is
+deferred to a later batch.
+
+### Added
+
+- `:tx-info-range` event and a `:between [#tx #tx]` range form for `tx-info`
+  (§6, §10), giving §9 watch-gap reconciliation a delta-shaped recovery
+  mechanism (R2b).
+- `:as-of #tx` synchronization anchor on the `:watch-established` event (§9,
+  §10), making the baseline-snapshot / delta-stream join gap-free and
+  overlap-free (R3).
+- `#inst` admitted to the closed tag set as a value literal (§3, §5); `#uuid`
+  explicitly rejected in v1 with a required rejecting reader (R4).
+- New §5.4 "Value types": enumerated `:value-types` tag vocabulary plus an
+  accept-implies-storable conformance rule (R8).
+- §14 v1.x backlog note for an affordance conformance surface (R11).
+
+### Changed
+
+- §8.1 result ordering split by row anchoring: EDB-anchored rows keep
+  `(tx-id, ref-id)`; derivation-only rows order by a pinned total value order,
+  with a normative cursor-freeze statement — derived-predicate queries are now
+  paginable (R1).
+- `:between` pinned to a single visible-at-any-point relation across
+  `query`/`dump`; `export`'s asserted-within-window selection renamed to the
+  distinct `:asserted-within` qualifier (§8.1, §11) (R2a).
+- §7 uniqueness check no longer treats an identical live tuple as a conflict —
+  re-asserting an already-true `{:cardinality :one :unique? true}` fact is the
+  idempotent no-op the elision rule prescribes (R5).
+- "Default world" defined: `:welcome` carries `:world` only when a default
+  exists, else the key is absent and world-requiring verbs return
+  `:bad-args :detail {:reason :no-current-world}` (§4, §10) (R10).
+
+### Removed
+
+- `:rejected :orphan-referent` — unsatisfiable under §5.3's
+  reference-is-existence entity model (R6).
+- `:cohesive?` / `:acceptable?` flags from the `:proposed` event (§10, README) —
+  tautologically true, carried no information; aligns §10 with §7 (R9).
+
+[0.10.0]: https://github.com/to-lose-letrec/lemma/releases/tag/v0.10.0
+
 ## [0.9.0] - 2026-06-01
 
 First public release candidate. The specification is stable; a conformant

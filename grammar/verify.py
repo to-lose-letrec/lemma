@@ -127,6 +127,14 @@ ACCEPT_CASES: list[tuple[str, str]] = [
      '(propose #fact{:predicate label :subject #entity "alice" '
      ':object "she said \\"hi\\""})'),
 
+    # --- SPEC §5/§3/§5.4 #inst value literal (R4) ---
+    ("inst value literal in fact object position",
+     '(propose #fact{:predicate hired-on :subject #entity "alice" '
+     ':object #inst "2026-06-09T12:00:00Z"})'),
+    ("inst value literal in query argument position",
+     '(query :find [?x] '
+     ':where [[hired-on ?x #inst "2026-06-09T12:00:00Z"]])'),
+
     # --- EDN niceties ---
     ("comma as whitespace",
      '(query :find [?x], :where [[member-of ?x #entity "managers"]])'),
@@ -182,6 +190,11 @@ REJECT_CASES: list[tuple[str, str]] = [
     # --- SPEC §5.3 empty entity name ---
     ("empty entity name", '(propose #fact{:predicate member-of '
      ':subject #entity "" :object #entity "managers"})'),
+
+    # --- SPEC §3 closure: #uuid not accepted in v1 (R4) ---
+    ("uuid tag rejected (not in closed tag set)",
+     '(propose #fact{:predicate has-id :subject #entity "alice" '
+     ':object #uuid "00000000-0000-0000-0000-000000000000"})'),
 
     # --- malformed EDN ---
     ("unterminated string",

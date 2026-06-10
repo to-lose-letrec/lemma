@@ -43,7 +43,6 @@ client → (propose #fact{:predicate member-of
                         :subject #entity "alice"
                         :object  #entity "managers"})
 server → {:event :proposed :proposal #proposal "p-1"
-          :cohesive? true :acceptable? true
           :expires-at #inst "2026-05-09T12:34:56.789Z"}
 
 ;; The client asserts the proposal; the server commits the tx.
